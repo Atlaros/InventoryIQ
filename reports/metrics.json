@@ -1,0 +1,1 @@
+{"rmse": 8.265217012024511, "features": ["store", "item", "month", "day", "day_of_week", "quarter", "is_weekend", "is_holiday", "lag_1", "lag_7", "rmean_7"]}
