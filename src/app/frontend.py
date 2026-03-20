@@ -71,6 +71,25 @@ st.markdown("---")
 st.sidebar.header("⚙️ Configuración de Predicción")
 st.sidebar.markdown("Selecciona los parámetros para consultar el modelo XGBoost.")
 
+# Load catalogs from API
+API_BASE_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+
+try:
+    items_response = requests.get(f"{API_BASE_URL}/catalog/items", timeout=5)
+    stores_response = requests.get(f"{API_BASE_URL}/catalog/stores", timeout=5)
+    
+    if items_response.status_code == 200 and stores_response.status_code == 200:
+        items_catalog = items_response.json()
+        stores_catalog = stores_response.json()
+    else:
+        st.sidebar.error("❌ No se pudo cargar el catálogo")
+        items_catalog = [{"id": i, "name": f"Item {i}"} for i in range(1, 51)]
+        stores_catalog = [{"id": i, "name": f"Store {i}"} for i in range(1, 11)]
+except:
+    # Fallback if API is not running
+    items_catalog = [{"id": i, "name": f"Item {i}"} for i in range(1, 51)]
+    stores_catalog = [{"id": i, "name": f"Store {i}"} for i in range(1, 11)]
+
 # Selectores
 min_date = datetime.date(2013, 1, 1)
 max_date = datetime.date(2017, 12, 31)
@@ -83,21 +102,24 @@ selected_date = st.sidebar.date_input(
     help="Selecciona una fecha dentro del rango de datos históricos"
 )
 
-store_id = st.sidebar.number_input(
-    "🏪 ID de Tienda",
-    min_value=1,
-    max_value=10,
-    value=1,
-    help="ID de la tienda (1-10)"
+# Store selector with names
+store_options = {f"{s['name']} (ID: {s['id']})": s['id'] for s in stores_catalog}
+selected_store_label = st.sidebar.selectbox(
+    "🏪 Tienda",
+    options=list(store_options.keys()),
+    help="Selecciona la tienda"
 )
+store_id = store_options[selected_store_label]
 
-item_id = st.sidebar.number_input(
-    "📦 ID de Producto",
-    min_value=1,
-    max_value=50,
-    value=1,
-    help="ID del producto (1-50)"
+# Item selector with names
+item_options = {f"{i['name']} (ID: {i['id']})": i['id'] for i in items_catalog}
+selected_item_label = st.sidebar.selectbox(
+    "📦 Producto",
+    options=list(item_options.keys()),
+    help="Selecciona el producto"
 )
+item_id = item_options[selected_item_label]
+
 
 st.sidebar.markdown("---")
 
@@ -128,6 +150,9 @@ if predict_button:
             if response.status_code == 200:
                 result = response.json()
                 prediction = result['prediction']
+                store_name = result.get('store_name', f'Store #{store_id}')
+                item_name = result.get('item_name', f'Item #{item_id}')
+
                 
                 # ===========================
                 # RESULTADOS - 4 COLUMNAS CON MÉTRICAS
@@ -145,14 +170,15 @@ if predict_button:
                 with col2:
                     st.metric(
                         label="🏪 Tienda",
-                        value=f"#{store_id}"
+                        value=store_name
                     )
                 
                 with col3:
                     st.metric(
                         label="📦 Producto",
-                        value=f"#{item_id}"
+                        value=item_name
                     )
+
                 
                 with col4:
                     st.metric(
@@ -382,10 +408,12 @@ else:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.image("https://via.placeholder.com/300x200/3b82f6/ffffff?text=Machine+Learning", use_container_width=True)
+        st.image("https://via.placeholder.com/300x200/3b82f6/ffffff?text=Machine+Learning", width="stretch")
+
     
     with col2:
-        st.image("https://via.placeholder.com/300x200/8b5cf6/ffffff?text=XGBoost+Model", use_container_width=True)
+        st.image("https://via.placeholder.com/300x200/8b5cf6/ffffff?text=XGBoost+Model", width="stretch")
+
     
     with col3:
-        st.image("https://via.placeholder.com/300x200/10b981/ffffff?text=Real-Time+API", use_container_width=True)
+        st.image("https://via.placeholder.com/300x200/10b981/ffffff?text=Real-Time+API", width="stretch")

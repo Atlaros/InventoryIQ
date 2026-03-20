@@ -16,10 +16,14 @@ DATA_PATH = BASE_DIR / 'data' / 'processed' / 'train_features.parquet'
 model = None
 feature_store = None
 EXPECTED_FEATURES = None  # Se carga dinámicamente desde metrics.json
+items_catalog = {}  # {id: name}
+stores_catalog = {}  # {id: name}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model, feature_store, EXPECTED_FEATURES
+    global model, feature_store, EXPECTED_FEATURES, items_catalog, stores_catalog
+
     print("🚀 INICIANDO API INVENTORY-IQ...")
     
     # 1. Cargar Feature List desde metrics.json
@@ -57,6 +61,26 @@ async def lifespan(app: FastAPI):
     feature_store = full_df.set_index(['date_str', 'store', 'item'], drop=False)
     
     print(f"✅ Feature Store listo: {len(feature_store)} registros.")
+    
+    # 4. Cargar Catálogos
+    print("📚 Cargando catálogos de productos y tiendas...")
+    from supabase import create_client
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv(ENV_PATH := BASE_DIR / '.env')
+    supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+    
+    # Cargar items
+    items_result = supabase.table('items').select('*').execute()
+    items_catalog = {item['id']: item['name'] for item in items_result.data}
+    print(f"✅ Catálogo de productos: {len(items_catalog)} items")
+    
+    # Cargar stores
+    stores_result = supabase.table('stores').select('*').execute()
+    stores_catalog = {store['id']: store['name'] for store in stores_result.data}
+    print(f"✅ Catálogo de tiendas: {len(stores_catalog)} stores")
+    
     yield
     print("🛑 Apagando API...")
     del model
@@ -72,12 +96,26 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     date: str
     store: int
+    store_name: str
     item: int
+    item_name: str
     prediction: float
+
 
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "InventoryIQ Brain is Running 🧠"}
+
+@app.get("/catalog/items")
+def get_items_catalog():
+    """Returns all products with their names"""
+    return [{"id": id, "name": name} for id, name in items_catalog.items()]
+
+@app.get("/catalog/stores")
+def get_stores_catalog():
+    """Returns all stores with their names"""
+    return [{"id": id, "name": name} for id, name in stores_catalog.items()]
+
 
 @app.get("/model/info")
 def model_info():
@@ -140,7 +178,9 @@ def predict_demand(request: PredictionRequest):
         return {
             "date": request.date,
             "store": request.store,
+            "store_name": stores_catalog.get(request.store, f"Store #{request.store}"),
             "item": request.item,
+            "item_name": items_catalog.get(request.item, f"Item #{request.item}"),
             "prediction": round(float(prediction), 2)
         }
 
